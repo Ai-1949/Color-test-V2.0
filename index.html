@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>色觉检测工具</title>
+<style>
+/* ═══════════════════════════════════════
+   CSS 变量
+═══════════════════════════════════════ */
+:root {
+  /* 颜色 */
+  --bg:        #f0f2f7;
+  --card:      #ffffff;
+  --border:    rgba(0,0,0,0.06);
+  --ink:       #1a1d2e;
+  --ink2:      #505470;
+  --ink3:      #9198b5;
+  --accent:    #4361ee;
+  --accent-l:  #eef0fd;
+  --green:     #16a34a;
+  --green-l:   #dcfce7;
+  --red:       #dc2626;
+  --red-l:     #fee2e2;
+  --gold:      #d97706;
+
+  /* 排版 */
+  --font: -apple-system, 'PingFang SC', 'Noto Sans CJK SC',
+          'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+          'MIUI', sans-serif;
+
+  /* 尺寸 — 统一用 env() 处理刘海/底栏 */
+  --sat: env(safe-area-inset-top,    0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left,   0px);
+  --sar: env(safe-area-inset-right,  0px);
+
+  /* 圆角 */
+  --r:  16px;
+  --rs: 10px;
+
+  /* 阴影 */
+  --sh:    0 1px 8px rgba(0,0,0,0.06), 0 3px 14px rgba(0,0,0,0.05);
+  --sh-md: 0 4px 24px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.04);
+
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+/* ═══════════════════════════════════════
+   重置
+═══════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  height: 100%;
+  /* 防止 iOS 双击缩放 */
+  touch-action: manipulation;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  /* 防止 iOS 橡皮筋效果导致背景露出 */
+  overscroll-behavior: none;
+}
+
+/* 全局按钮基础 */
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  /* 移除 iOS 默认样式 */
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  /* 防止长按出现选中菜单 */
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* 防止图片/canvas 被长按 */
+canvas, img { -webkit-touch-callout: none; user-select: none; }
+
+/* ═══════════════════════════════════════
+   页面切换
+═══════════════════════════════════════ */
+.page {
+  display: none;
+  min-height: 100vh;
+  min-height: -webkit-fill-available; /* iOS Safari 100vh 修复 */
+  flex-direction: column;
+  align-items: center;
+}
+.page.active {
+  display: flex;
+  animation: pgIn .3s var(--ease) both;
+}
+@keyframes pgIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 背景纹理 */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 45% at 15% 8%,  rgba(67,97,238,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 88% 92%, rgba(239,68,68,.05) 0%, transparent 60%);
+}
+
+/* ═══════════════════════════════════════
+   ① 介绍页
+═══════════════════════════════════════ */
+#pg-intro {
+  padding:
+    calc(var(--sat) + 36px)   /* top：刘海 + 间距 */
+    calc(var(--sar) + 18px)   /* right */
+    calc(var(--sab) + 36px)   /* bottom：home bar + 间距 */
+    calc(var(--sal) + 18px);  /* left */
+  justify-content: flex-start;
+  position: relative; z-index: 1;
+}
+
+.intro-inner {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0; /* 用 margin 精确控制各模块间距 */
+}
+
+/* Logo */
+.intro-logo {
+  width: 72px; height: 72px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #4361ee 0%, #7c3aed 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px;
+  box-shadow: 0 8px 28px rgba(67,97,238,.32);
+  flex-shrink: 0;
+  margin-bottom: 16px;
+  animation: logoGlow 3s ease-in-out infinite alternate;
+}
+@keyframes logoGlow {
+  from { box-shadow: 0 6px 22px rgba(67,97,238,.26); }
+  to   { box-shadow: 0 12px 40px rgba(67,97,238,.48); }
+}
+
+/* 标题 */
+.intro-h1 {
+  text-align: center;
+  font-size: clamp(22px, 5.5vw, 28px);
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+.intro-h1 span {
+  background: linear-gradient(120deg, #4361ee 20%, #7c3aed 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.intro-sub {
+  font-size: 13px;
+  color: var(--ink3);
+  text-align: center;
+  margin-bottom: 24px;
+  letter-spacing: .3px;
+}
+
+/* 特性列表 */
+.feat-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.feat {
+  background: var(--card);
+  border-radius: var(--rs);
+  padding: 13px 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  box-shadow: var(--sh);
+}
+.feat-ico {
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.feat h3 { font-size: 13px; font-weight: 700; margin-bottom: 2px; color: var(--ink); }
+.feat p  { font-size: 12px; color: var(--ink2); line-height: 1.6; }
+
+/* 警告框 */
+.warn-box {
+  width: 100%;
+  padding: 12px 14px;
+  background: #fffbf0;
+  border: 1px solid #fcd34d;
+  border-radius: var(--rs);
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+.warn-box strong { color: #78350f; }
+
+/* 开始按钮 */
+.btn-primary {
+  width: 100%;
+  /* 手机上至少 52px 高，触摸友好 */
+  min-height: 52px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #4361ee, #5b75f0);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: var(--r);
+  box-shadow: 0 6px 22px rgba(67,97,238,.36);
+  transition: transform .15s, box-shadow .15s;
+  letter-spacing: .3px;
+  line-height: 1;
+}
+.btn-primary:active { transform: scale(.97) translateY(1px); box-shadow: 0 2px 10px rgba(67,97,238,.26); }
+
+/* ═══════════════════════════════════════
+   ② 测试页
+═══════════════════════════════════════ */
+#pg-test {
+  padding: 0;
+  position: relative; z-index: 1;
+  /* 页面可以正常滚动 */
+  align-items: stretch;
+}
+
+/* ── 粘性顶栏 ── */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(240,242,247,.95);
+  /* iOS Safari backdrop-filter */
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--border);
+  /* 顶部安全区（刘海） */
+  padding-top: calc(var(--sat) + 10px);
+  padding-left:  calc(var(--sal) + 16px);
+  padding-right: calc(var(--sar) + 16px);
+  padding-bottom: 0;
+}
+
+.topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.tbar-left {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  line-height: 1;
+}
+.tbar-left b {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--accent);
+  /* 避免数字宽度跳变 */
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: right;
+}
+.tbar-right {
+  font-size: 11px;
+  color: var(--ink3);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 进度条 */
+.prog-track {
+  width: 100%;
+  height: 3px;
+  background: #dde0ea;
+}
+.prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4361ee, #7c9cff);
+  border-radius: 0 2px 2px 0;
+  transition: width .45s var(--ease);
+  min-width: 3px;
+  will-change: width;
+}
+
+/* ── 题号点 ── */
+/*
+  关键优化：
+  - 横向单行滚动，不换行 → 不撑高顶栏
+  - 隐藏滚动条，保持视觉整洁
+  - 每个点 28×28px → 触摸友好
+*/
+.dot-scroll-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 8px 0 6px;
+}
+.dot-scroll-wrap::-webkit-scrollbar { display: none; }
+
+.dot-strip {
+  display: flex;
+  gap: 5px;
+  width: max-content;
+  padding: 0 calc(var(--sal) + 16px) 0 calc(var(--sar) + 16px);
+}
+
+.dot {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1.5px solid #cdd1e6;
+  background: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  color: var(--ink3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .18s, border-color .18s, color .18s, transform .18s;
+  /* 最小触摸尺寸 — 视觉28px但触摸区更大 */
+  position: relative;
+}
+.dot::after {
+  content: '';
+  position: absolute; inset: -4px;
+}
+.dot.answered { background: var(--accent-l); border-color: var(--accent); color: var(--accent); }
+.dot.current  { background: var(--accent);   border-color: var(--accent); color: #fff; transform: scale(1.12); }
+
+/* ── 主内容区 ── */
+.test-body {
+  width: 100%;
+  max-width: 440px;
+  /* 左右安全区 */
+  padding:
+    16px
+    calc(var(--sar) + 16px)
+    calc(var(--sab) + 72px)  /* 底部留出 home bar 空间 */
+    calc(var(--sal) + 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+}
+
+/* ── 图片卡 ── */
+.plate-card {
+  width: 100%;
+  background: var(--card);
+  border-radius: var(--r);
+  padding: 16px 16px 18px;
+  box-shadow: var(--sh-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.plate-card-top {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.plate-seq {
+  font-size: 11px; color: var(--ink3); font-weight: 700;
+  letter-spacing: .8px; text-transform: uppercase;
+}
+.type-tag {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 20px;
+  color: #fff; letter-spacing: .4px;
+}
+
+/*
+  关键：画布尺寸自适应屏幕
+  手机宽度 375px 时 → 画布约 220px
+  手机宽度 320px 时 → 画布约 196px
+  使用 vw 而非固定 px，同时限制最大值
+*/
+.canvas-ring {
+  position: relative;
+  filter: drop-shadow(0 5px 16px rgba(0,0,0,.11));
+  /* 让宽度随父级自适应，JS 会读取并设置 canvas 尺寸 */
+  width: min(220px, calc(100vw - 100px));
+  height: min(220px, calc(100vw - 100px));
+}
+.canvas-ring canvas {
+  display: block;
+  border-radius: 50%;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 已选徽章 */
+.sel-badge {
+  position: absolute; bottom: 4px; right: 4px;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 10px rgba(67,97,238,.5);
+  opacity: 0; transform: scale(.55);
+  transition: opacity .22s, transform .22s var(--ease);
+  pointer-events: none;
+}
+.sel-badge.show { opacity: 1; transform: scale(1); }
+
+/* ── 选项卡 ── */
+.qa-card {
+  width: 100%;
+  background: var(--card);
+  border-radius: var(--r);
+  padding: 16px 14px;
+  box-shadow: var(--sh);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.qa-q {
+  text-align: center;
+  font-size: 14px; font-weight: 700;
+  margin-bottom: 14px; color: var(--ink);
+  line-height: 1.4;
+}
+
+/*
+  数字网格：2行×5列
+  每个按钮高度 min 44px (iOS HIG 最小触摸尺寸)
+*/
+.opts-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+  margin-bottom: 9px;
+}
+.opt {
+  min-height: 46px;
+  padding: 0;
+  border: 1.5px solid #dde0ef;
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 19px; font-weight: 800; color: var(--ink2);
+  transition: background .14s, border-color .14s, color .14s, transform .12s;
+  display: flex; align-items: center; justify-content: center;
+  /* 防止数字溢出 */
+  overflow: hidden;
+}
+.opt:active   { transform: scale(.90); background: var(--accent-l); }
+.opt.picked   { border-color: var(--accent); background: var(--accent-l); color: var(--accent); }
+
+/* 无数字按钮 */
+.opt-none {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1.5px solid #dde0ef;
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 13px; font-weight: 600; color: var(--ink2);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .14s, border-color .14s, color .14s, transform .12s;
+  white-space: nowrap;
+}
+.opt-none:active { transform: scale(.97); }
+.opt-none.picked { border-color: #7c3aed; background: #f5f0ff; color: #7c3aed; }
+
+/* ── 导航行 ── */
+.nav-row {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.btn-nav {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--rs);
+  font-size: 14px; font-weight: 700;
+  transition: transform .12s, box-shadow .12s;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-prev {
+  background: var(--card);
+  border: 1.5px solid #dde0ef;
+  color: var(--ink2);
+}
+.btn-prev:active { transform: scale(.96); background: #f0f1f8; }
+.btn-prev:disabled { opacity: .38; pointer-events: none; }
+
+.btn-next-q {
+  background: linear-gradient(135deg, #4361ee, #5b75f0);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(67,97,238,.30);
+}
+.btn-next-q:active { transform: scale(.96) translateY(1px); box-shadow: 0 2px 6px rgba(67,97,238,.22); }
+.btn-next-q:disabled { opacity: .38; pointer-events: none; }
+
+/* ── 提交区 ── */
+.submit-wrap {
+  width: 100%;
+  opacity: 0; pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity .3s, transform .3s;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+}
+.submit-wrap.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+.unanswered-hint {
+  font-size: 12px; color: var(--gold); font-weight: 600; text-align: center;
+  min-height: 16px;
+}
+.submit-hint {
+  font-size: 12px; color: var(--ink3); text-align: center; line-height: 1.6;
+}
+.btn-submit {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: #fff; font-size: 16px; font-weight: 700;
+  border-radius: var(--r);
+  box-shadow: 0 5px 20px rgba(22,163,74,.28);
+  transition: transform .14s, box-shadow .14s;
+  line-height: 1;
+}
+.btn-submit:active { transform: scale(.97) translateY(1px); box-shadow: 0 2px 8px rgba(22,163,74,.22); }
+.btn-submit:disabled { opacity: .45; pointer-events: none; }
+
+/* ═══════════════════════════════════════
+   ③ 结果页
+═══════════════════════════════════════ */
+#pg-result {
+  padding:
+    calc(var(--sat) + 40px)
+    calc(var(--sar) + 18px)
+    calc(var(--sab) + 40px)
+    calc(var(--sal) + 18px);
+  position: relative; z-index: 1;
+}
+
+.result-inner {
+  width: 100%; max-width: 400px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 16px;
+}
+
+.result-hero { text-align: center; }
+.result-emoji {
+  font-size: 62px; display: block; margin-bottom: 10px;
+  animation: bounceIn .55s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes bounceIn {
+  from { transform: scale(.2); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+.result-h2  { font-size: 24px; font-weight: 800; letter-spacing: -.4px; }
+.result-sub { font-size: 13px; color: var(--ink3); margin-top: 4px; }
+
+/* 圆环 */
+.ring-wrap { position: relative; width: 148px; height: 148px; }
+.ring-wrap svg { transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: #dde0ea; stroke-width: 10; }
+.ring-fg {
+  fill: none; stroke-width: 10; stroke-linecap: round;
+  stroke-dasharray: 377; stroke-dashoffset: 377;
+  transition: stroke-dashoffset 1.1s var(--ease) .2s;
+}
+.ring-inner {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.ring-pct { font-size: 32px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+.ring-lbl { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+
+/* 三格统计 */
+.stat3 {
+  width: 100%;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+}
+.scard {
+  background: var(--card); border-radius: var(--rs);
+  padding: 14px 8px; text-align: center;
+  border: 1px solid var(--border); box-shadow: var(--sh);
+}
+.snum { font-size: 26px; font-weight: 900; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; }
+.slbl { font-size: 11px; color: var(--ink3); font-weight: 600; }
+.sc-all .snum { color: var(--ink); }
+.sc-ok  .snum { color: var(--green); }
+.sc-bad .snum { color: var(--red); }
+
+/* 评语 */
+.verdict {
+  width: 100%; border-radius: var(--rs);
+  padding: 16px 18px;
+  font-size: 13px; line-height: 1.75;
+  border: 1px solid transparent;
+}
+.verdict h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+
+/* 结果页按钮 */
+.btn-outline {
+  width: 100%; min-height: 50px;
+  padding: 13px 16px;
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+  color: var(--accent); font-size: 15px; font-weight: 700;
+  border-radius: var(--r);
+  transition: background .14s, transform .12s;
+  line-height: 1;
+}
+.btn-outline:active { background: var(--accent-l); transform: scale(.97); }
+
+.btn-fill {
+  width: 100%; min-height: 50px;
+  padding: 13px 16px;
+  background: linear-gradient(135deg, #4361ee, #5b75f0);
+  color: #fff; font-size: 15px; font-weight: 700;
+  border-radius: var(--r);
+  box-shadow: 0 4px 18px rgba(67,97,238,.28);
+  transition: transform .12s, box-shadow .12s;
+  line-height: 1;
+}
+.btn-fill:active { transform: scale(.97) translateY(1px); box-shadow: 0 2px 8px rgba(67,97,238,.22); }
+
+/* ═══════════════════════════════════════
+   ④ 回顾页
+═══════════════════════════════════════ */
+#pg-review {
+  padding: 0;
+  position: relative; z-index: 1;
+  align-items: stretch;
+}
+
+/* 顶栏 */
+.review-bar {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(240,242,247,.95);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding:
+    calc(var(--sat) + 12px)
+    calc(var(--sar) + 16px)
+    12px
+    calc(var(--sal) + 16px);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.review-bar h2 { font-size: 16px; font-weight: 800; }
+.btn-back {
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  background: var(--accent-l);
+  padding: 7px 14px; border-radius: 20px;
+  min-height: 34px;
+  display: flex; align-items: center;
+  transition: background .14s;
+}
+.btn-back:active { background: #d8dcfb; }
+
+/* 回顾列表 */
+.review-list {
+  width: 100%; max-width: 440px;
+  padding:
+    14px
+    calc(var(--sar) + 16px)
+    calc(var(--sab) + 40px)
+    calc(var(--sal) + 16px);
+  display: flex; flex-direction: column; gap: 12px;
+  align-self: center;
+}
+
+/* 每条回顾 */
+.ri {
+  background: var(--card); border-radius: var(--r);
+  box-shadow: var(--sh); border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ri-head {
+  padding: 12px 14px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.ri-seq  { font-size: 11px; color: var(--ink3); font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+.ri-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+}
+.ri-badge.ok  { background: var(--green-l); color: #15803d; }
+.ri-badge.bad { background: var(--red-l);   color: #b91c1c; }
+
+.ri-body {
+  padding: 12px 14px 14px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+
+/* 缩略图 */
+.ri-thumb { position: relative; flex-shrink: 0; }
+.ri-thumb canvas { display: block; border-radius: 50%; }
+.ri-overlay {
+  position: absolute; inset: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 900; color: #fff; pointer-events: none;
+}
+.ri-overlay.ok  { background: rgba(22,163,74,.60); }
+.ri-overlay.bad { background: rgba(220,38,38,.60); }
+
+/* 答案信息 */
+.ri-info { flex: 1; min-width: 0; }
+.ri-type {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px; color: #fff;
+  margin-bottom: 8px; letter-spacing: .4px;
+}
+.ri-rows { display: flex; flex-direction: column; gap: 5px; }
+.ri-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 8px;
+}
+.ri-lbl { font-size: 11px; font-weight: 600; color: var(--ink3); min-width: 50px; }
+.ri-val { font-size: 17px; font-weight: 900; }
+.ri-row.u-ok  { background: var(--green-l); }
+.ri-row.u-bad { background: var(--red-l); }
+.ri-row.right { background: #f0fdf4; }
+
+/* ═══════════════════════════════════════
+   工具类
+═══════════════════════════════════════ */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-thumb { background: #c0c5d8; border-radius: 3px; }
+
+/* 针对小屏（≤360px，如部分小米/红米）额外收紧 */
+@media (max-width: 360px) {
+  .opts-grid { gap: 5px; }
+  .opt { min-height: 42px; font-size: 17px; }
+  .opt-none { font-size: 12px; }
+  .intro-logo { width: 62px; height: 62px; font-size: 30px; }
+  .intro-h1 { font-size: 20px; }
+  .feat { padding: 11px 12px; gap: 10px; }
+  .feat-ico { width: 32px; height: 32px; font-size: 16px; }
+}
+
+/* 横屏适配 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .canvas-ring {
+    width: min(160px, 36vh);
+    height: min(160px, 36vh);
+  }
+  .test-body { padding-top: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════
+     ① 介绍页
+═══════════════════════════ -->
+<div class="page active" id="pg-intro">
+  <div class="intro-inner">
+
+    <div class="intro-logo">👁</div>
+
+    <h1 class="intro-h1">色觉<span>检测</span>工具</h1>
+    <p class="intro-sub">基于石原氏色盲测试原理 · 共 20 题</p>
+
+    <div class="feat-list">
+      <div class="feat">
+        <div class="feat-ico" style="background:#eef0fd">🎨</div>
+        <div>
+          <h3>三种色觉类型</h3>
+          <p>红绿型、蓝黄型、紫绿型等多种配色，全面模拟色盲检测场景。</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico" style="background:#f0fdf4">📝</div>
+        <div>
+          <h3>自由作答 · 随时修改</h3>
+          <p>可点击顶部题号随时跳回修改答案，全部作答后统一提交。</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico" style="background:#fefce8">📊</div>
+        <div>
+          <h3>结果 + 详细回顾</h3>
+          <p>提交后统计正确率，支持逐题回顾，对比你的选择与正确答案。</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico" style="background:#fdf2f8">⚡</div>
+        <div>
+          <h3>测试流程</h3>
+          <p>观察圆点图 → 选择数字 → 跳题修改 → 提交 → 结果与回顾</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="warn-box">
+      ⚠ <strong>声明：</strong>本工具仅供娱乐与自我了解，不构成任何医学诊断。若怀疑存在色觉异常，请前往专业眼科机构检测。屏幕校色与环境光线会影响结果。
+    </div>
+
+    <button class="btn-primary" onclick="startTest()">开始测试 →</button>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     ② 测试页
+═══════════════════════════ -->
+<div class="page" id="pg-test">
+
+  <!-- 粘性顶栏 -->
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="tbar-left">
+        第&nbsp;<b id="cur-num">1</b>&nbsp;<span style="font-size:11px;color:var(--ink3)">/ 20 题</span>
+      </div>
+      <div class="tbar-right" id="answered-count">已答 0 / 20</div>
+    </div>
+    <div class="prog-track">
+      <div class="prog-fill" id="prog-fill" style="width:5%"></div>
+    </div>
+    <!-- 横向滚动题号条 -->
+    <div class="dot-scroll-wrap" id="dot-scroll-wrap">
+      <div class="dot-strip" id="dot-strip"></div>
+    </div>
+  </div>
+
+  <!-- 主体 -->
+  <div class="test-body">
+
+    <!-- 测试图卡 -->
+    <div class="plate-card">
+      <div class="plate-card-top">
+        <span class="plate-seq" id="plate-seq">图 01</span>
+        <span class="type-tag" id="type-tag">红绿型</span>
+      </div>
+      <div class="canvas-ring" id="canvas-ring">
+        <canvas id="main-canvas"></canvas>
+        <div class="sel-badge" id="sel-badge"></div>
+      </div>
+    </div>
+
+    <!-- 选项卡 -->
+    <div class="qa-card">
+      <p class="qa-q">你看到了哪个数字？（可随时修改）</p>
+      <div class="opts-grid" id="opts-grid"></div>
+      <button class="opt-none" id="btn-none" onclick="pickAnswer('none')">
+        👁&nbsp; 无数字（看不出数字）
+      </button>
+    </div>
+
+    <!-- 上下题导航 -->
+    <div class="nav-row">
+      <button class="btn-nav btn-prev" id="btn-prev" onclick="goQ(curIdx-1)">← 上一题</button>
+      <button class="btn-nav btn-next-q" id="btn-next-q" onclick="goQ(curIdx+1)">下一题 →</button>
+    </div>
+
+    <!-- 提交区 -->
+    <div class="submit-wrap" id="submit-wrap">
+      <div class="unanswered-hint" id="unanswered-hint"></div>
+      <div class="submit-hint">所有题目均已作答，可提交查看结果<br>或返回任意题目修改答案</div>
+      <button class="btn-submit" id="btn-submit" onclick="submitAll()">✓ 提交并查看结果</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     ③ 结果页
+═══════════════════════════ -->
+<div class="page" id="pg-result">
+  <div class="result-inner">
+
+    <div class="result-hero">
+      <span class="result-emoji" id="r-emoji">🎉</span>
+      <h2 class="result-h2" id="r-title">测试完成！</h2>
+      <p class="result-sub"   id="r-sub">以下是您的检测结果</p>
+    </div>
+
+    <!-- 圆环 (r=60, 周长≈377) -->
+    <div class="ring-wrap">
+      <svg width="148" height="148" viewBox="0 0 148 148">
+        <circle class="ring-bg" cx="74" cy="74" r="60"/>
+        <circle class="ring-fg" id="ring-fg" cx="74" cy="74" r="60"/>
+      </svg>
+      <div class="ring-inner">
+        <span class="ring-pct" id="ring-pct">0%</span>
+        <span class="ring-lbl">正确率</span>
+      </div>
+    </div>
+
+    <div class="stat3">
+      <div class="scard sc-all"><div class="snum">20</div><div class="slbl">总题数</div></div>
+      <div class="scard sc-ok" ><div class="snum" id="s-ok">0</div><div class="slbl">答对</div></div>
+      <div class="scard sc-bad"><div class="snum" id="s-bad">0</div><div class="slbl">答错</div></div>
+    </div>
+
+    <div class="verdict" id="verdict">
+      <h3 id="v-title"></h3>
+      <p  id="v-text"></p>
+    </div>
+
+    <button class="btn-outline" onclick="showReview()">🔍 回顾答题详情</button>
+    <button class="btn-fill"    onclick="restartTest()">🔄 重新测试</button>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     ④ 回顾页
+═══════════════════════════ -->
+<div class="page" id="pg-review">
+  <div class="review-bar">
+    <h2>答题回顾</h2>
+    <button class="btn-back" onclick="showPage('pg-result')">← 返回结果</button>
+  </div>
+  <div class="review-list" id="review-list"></div>
+</div>
+
+<!-- ═══════════════════════════
+     JavaScript
+═══════════════════════════ -->
+<script>
+/* ── 字模 7×5 ── */
+const MAPS = {
+  '0':[[0,1,1,1,0],[1,0,0,0,1],[1,0,0,1,1],[1,0,1,0,1],[1,1,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  '1':[[0,0,1,0,0],[0,1,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,1,1,1,0]],
+  '2':[[0,1,1,1,0],[1,0,0,0,1],[0,0,0,0,1],[0,0,1,1,0],[0,1,0,0,0],[1,0,0,0,0],[1,1,1,1,1]],
+  '3':[[0,1,1,1,0],[1,0,0,0,1],[0,0,0,0,1],[0,0,1,1,0],[0,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  '4':[[0,0,0,1,0],[0,0,1,1,0],[0,1,0,1,0],[1,0,0,1,0],[1,1,1,1,1],[0,0,0,1,0],[0,0,0,1,0]],
+  '5':[[1,1,1,1,1],[1,0,0,0,0],[1,1,1,1,0],[0,0,0,0,1],[0,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  '6':[[0,1,1,1,0],[1,0,0,0,0],[1,0,0,0,0],[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  '7':[[1,1,1,1,1],[0,0,0,0,1],[0,0,0,1,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0]],
+  '8':[[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  '9':[[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,1],[0,0,0,0,1],[0,0,0,1,0],[0,1,1,0,0]],
+  'none': Array.from({length:7}, ()=>[0,0,0,0,0]),
+};
+
+/* ── 配色 ── */
+const SCHEMES = [
+  { name:'红绿型', color:'#e54040', fgH:8,   fgS:78, fgL:52, bgH:120, bgS:62, bgL:44 },
+  { name:'绿红型', color:'#22a060', fgH:122, fgS:62, fgL:44, bgH:8,   bgS:78, bgL:52 },
+  { name:'蓝黄型', color:'#3b82f6', fgH:218, fgS:82, fgL:52, bgH:46,  bgS:90, bgL:52 },
+  { name:'黄蓝型', color:'#f59e0b', fgH:46,  fgS:90, fgL:52, bgH:218, bgS:82, bgL:52 },
+  { name:'紫绿型', color:'#8b5cf6', fgH:275, fgS:68, fgL:50, bgH:148, bgS:60, bgL:42 },
+  { name:'橙青型', color:'#f97316', fgH:28,  fgS:92, fgL:50, bgH:188, bgS:70, bgL:44 },
+];
+
+/* ── 题目 ── */
+const TESTS = [
+  {d:'6',si:0},{d:'2',si:1},{d:'9',si:2},{d:'4',si:3},
+  {d:'none',si:4},{d:'7',si:5},{d:'1',si:0},{d:'3',si:1},
+  {d:'8',si:2},{d:'5',si:3},{d:'0',si:4},{d:'6',si:5},
+  {d:'3',si:0},{d:'9',si:1},{d:'none',si:2},{d:'2',si:3},
+  {d:'7',si:4},{d:'5',si:5},{d:'4',si:0},{d:'8',si:1},
+];
+
+/* ── 绘图 ── */
+function rnd(a,b){ return Math.random()*(b-a)+a; }
+function isFg(gx,gy,map){
+  const mx=gx-5,my=gy-4;
+  if(mx<0||mx>=5||my<0||my>=7) return false;
+  return map[my][mx]===1;
+}
+function jHSL(h,s,l){
+  return `hsl(${((h+rnd(-14,14)+360)%360).toFixed(1)},`+
+         `${Math.min(100,Math.max(30,s+rnd(-12,12))).toFixed(1)}%,`+
+         `${Math.min(76,Math.max(30,l+rnd(-10,10))).toFixed(1)}%)`;
+}
+function drawPlate(canvas, digit, scheme, logicPx){
+  const dpr = Math.min(window.devicePixelRatio||1, 3); // 支持 3x 屏（部分安卓）
+  canvas.width  = logicPx * dpr;
+  canvas.height = logicPx * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const SIZE=logicPx, GRID=22, CELL=SIZE/GRID;
+  const map = MAPS[digit]||MAPS['none'];
+  ctx.clearRect(0,0,SIZE,SIZE);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(SIZE/2,SIZE/2,SIZE/2-1,0,Math.PI*2); ctx.clip();
+  ctx.fillStyle='#f0f0f0'; ctx.fillRect(0,0,SIZE,SIZE);
+  for(let gy=0;gy<GRID;gy++){
+    for(let gx=0;gx<GRID;gx++){
+      const fg=isFg(gx,gy,map);
+      const j=CELL*.36;
+      const cx=(gx+.5)*CELL+rnd(-j,j), cy=(gy+.5)*CELL+rnd(-j,j);
+      const r=CELL*.5*rnd(.36,.62);
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.fillStyle=fg
+        ?jHSL(scheme.fgH,scheme.fgS,scheme.fgL)
+        :jHSL(scheme.bgH,scheme.bgS,scheme.bgL);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(SIZE/2,SIZE/2,SIZE/2-1,0,Math.PI*2);
+  ctx.strokeStyle='rgba(0,0,0,0.07)'; ctx.lineWidth=1.5; ctx.stroke();
+}
+
+/* ── 状态 ── */
+let curIdx   = 0;
+let userAns  = Array(20).fill(null);
+let offscreens = [];
+
+/* ── 页面切换 ── */
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0,behavior:'instant'});
+  // iOS Safari: 强制触发重绘以修复 sticky 失效
+  document.body.style.display='none';
+  void document.body.offsetHeight;
+  document.body.style.display='';
+}
+
+/* ── 开始 ── */
+function startTest(){
+  curIdx   = 0;
+  userAns  = Array(20).fill(null);
+  offscreens = [];
+
+  // 读取画布容器的实际渲染宽度（响应式）
+  // 先切换到测试页让 DOM 可计算尺寸
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pg-test').classList.add('active');
+  window.scrollTo({top:0,behavior:'instant'});
+
+  // 等一帧再读尺寸
+  requestAnimationFrame(()=>{
+    const ringEl = document.getElementById('canvas-ring');
+    const logicPx = Math.round(ringEl.getBoundingClientRect().width) || 220;
+
+    for(let i=0;i<20;i++){
+      const c = document.createElement('canvas');
+      drawPlate(c, TESTS[i].d, SCHEMES[TESTS[i].si%SCHEMES.length], logicPx);
+      offscreens.push(c);
+    }
+
+    buildDots();
+    buildOpts();
+    loadQ(0);
+  });
+}
+
+/* ── 构建题号点 ── */
+function buildDots(){
+  const strip = document.getElementById('dot-strip');
+  strip.innerHTML = '';
+  for(let i=0;i<20;i++){
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.id = 'dot-'+i;
+    d.textContent = i+1;
+    d.addEventListener('click', ()=>goQ(i));
+    strip.appendChild(d);
+  }
+}
+
+/* ── 构建选项 ── */
+function buildOpts(){
+  const grid = document.getElementById('opts-grid');
+  grid.innerHTML = '';
+  for(let n=0;n<=9;n++){
+    const b = document.createElement('button');
+    b.className = 'opt';
+    b.textContent = n;
+    b.dataset.v = String(n);
+    b.addEventListener('click', ()=>pickAnswer(String(n)));
+    grid.appendChild(b);
+  }
+}
+
+/* ── 读取画布实际尺寸（便于主canvas更新）── */
+function getPlateSize(){
+  const el = document.getElementById('canvas-ring');
+  return Math.round(el.getBoundingClientRect().width) || 220;
+}
+
+/* ── 加载题 ── */
+function loadQ(idx){
+  curIdx = idx;
+  const t  = TESTS[idx];
+  const sc = SCHEMES[t.si % SCHEMES.length];
+
+  // 顶栏文字
+  document.getElementById('cur-num').textContent       = idx+1;
+  document.getElementById('plate-seq').textContent     = '图 '+String(idx+1).padStart(2,'0');
+  document.getElementById('type-tag').textContent      = sc.name;
+  document.getElementById('type-tag').style.background = sc.color;
+
+  // 进度
+  document.getElementById('prog-fill').style.width = Math.max(5, Math.round((idx+1)/20*100))+'%';
+
+  // 将预渲染图复制到主 canvas
+  const main   = document.getElementById('main-canvas');
+  const logicPx = getPlateSize();
+  const dpr    = Math.min(window.devicePixelRatio||1,3);
+  main.width  = logicPx * dpr;
+  main.height = logicPx * dpr;
+  const ctx = main.getContext('2d');
+  // 将 offscreen（可能是不同 logicPx 绘制的）缩放复制
+  ctx.drawImage(offscreens[idx], 0, 0, main.width, main.height);
+
+  // 高亮选项
+  refreshOpts(idx);
+
+  // 导航按钮状态
+  document.getElementById('btn-prev').disabled   = (idx===0);
+  document.getElementById('btn-next-q').disabled = (idx===19);
+
+  // 题号点
+  document.querySelectorAll('.dot').forEach((d,i)=>{
+    d.classList.toggle('current',  i===idx);
+    d.classList.toggle('answered', i!==idx && userAns[i]!==null);
+  });
+
+  // 滚动题号条让当前点可见
+  const dotEl = document.getElementById('dot-'+idx);
+  if(dotEl){
+    dotEl.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  }
+
+  // 已答计数
+  const cnt = userAns.filter(a=>a!==null).length;
+  document.getElementById('answered-count').textContent = `已答 ${cnt} / 20`;
+
+  refreshSubmitBtn();
+
+  // 画布动画
+  const ring = document.getElementById('canvas-ring');
+  ring.style.cssText = 'opacity:0;transform:scale(.86);transition:none;';
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      ring.style.cssText = 'opacity:1;transform:scale(1);transition:opacity .32s,transform .32s cubic-bezier(.34,1.5,.64,1);';
+    });
+  });
+}
+
+/* ── 刷新选项高亮 ── */
+function refreshOpts(idx){
+  const picked = userAns[idx];
+  document.querySelectorAll('.opt').forEach(b=>{
+    b.classList.toggle('picked', b.dataset.v===picked);
+  });
+  document.getElementById('btn-none').classList.toggle('picked', picked==='none');
+
+  const badge = document.getElementById('sel-badge');
+  if(picked !== null){
+    badge.textContent = picked==='none'?'无':picked;
+    badge.classList.add('show');
+  } else {
+    badge.classList.remove('show');
+  }
+}
+
+/* ── 选择答案 ── */
+function pickAnswer(val){
+  userAns[curIdx] = val;
+  refreshOpts(curIdx);
+
+  const dot = document.getElementById('dot-'+curIdx);
+  if(dot) dot.classList.add('answered');
+
+  const cnt = userAns.filter(a=>a!==null).length;
+  document.getElementById('answered-count').textContent = `已答 ${cnt} / 20`;
+
+  refreshSubmitBtn();
+}
+
+/* ── 跳题 ── */
+function goQ(idx){
+  if(idx<0||idx>19) return;
+  loadQ(idx);
+  // 滚动页面到顶
+  document.getElementById('pg-test').scrollTo && document.getElementById('pg-test').scrollTo({top:0,behavior:'smooth'});
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── 刷新提交按钮 ── */
+function refreshSubmitBtn(){
+  const cnt  = userAns.filter(a=>a!==null).length;
+  const wrap = document.getElementById('submit-wrap');
+  const hint = document.getElementById('unanswered-hint');
+  const btn  = document.getElementById('btn-submit');
+  const left = 20 - cnt;
+
+  if(cnt === 20){
+    wrap.classList.add('show');
+    hint.textContent = '';
+    btn.disabled = false;
+  } else if(cnt >= 10){
+    wrap.classList.add('show');
+    hint.textContent = `还有 ${left} 题未作答`;
+    btn.disabled = true;
+  } else {
+    wrap.classList.remove('show');
+    hint.textContent = '';
+    btn.disabled = true;
+  }
+}
+
+/* ── 提交 ── */
+function submitAll(){
+  const unanswered = userAns.map((a,i)=>a===null?i:-1).filter(i=>i>=0);
+  if(unanswered.length>0){
+    const msg = `还有 ${unanswered.length} 题未作答，请先完成第 ${unanswered.map(i=>i+1).join('、')} 题`;
+    alert(msg);
+    goQ(unanswered[0]);
+    return;
+  }
+  buildResult();
+  showPage('pg-result');
+}
+
+/* ── 构建结果 ── */
+function buildResult(){
+  let correct=0;
+  userAns.forEach((a,i)=>{ if(a===TESTS[i].d) correct++; });
+  const total=20, pct=Math.round(correct/total*100);
+
+  document.getElementById('s-ok').textContent  = correct;
+  document.getElementById('s-bad').textContent = total-correct;
+
+  // 圆环颜色
+  let rc = '#4361ee';
+  if(pct>=90) rc='#16a34a';
+  else if(pct>=70) rc='#4361ee';
+  else if(pct>=50) rc='#d97706';
+  else rc='#dc2626';
+
+  const ring = document.getElementById('ring-fg');
+  ring.style.stroke = rc;
+  ring.style.strokeDashoffset = 377; // 重置
+  document.getElementById('ring-pct').style.color = rc;
+  document.getElementById('ring-pct').textContent = pct+'%';
+  setTimeout(()=>{ ring.style.strokeDashoffset = 377*(1-correct/total); }, 150);
+
+  // 评语
+  let emoji,title,sub,vtitle,vtext,vbg,vc;
+  if(pct===100){
+    emoji='🏆';title='色觉满分！';sub=`${correct}/${total} 全部答对`;
+    vtitle='色觉极佳';
+    vtext='您辨别颜色的能力非常出色，测试全部答对，色觉可能处于优秀水平。';
+    vbg='#f0fdf4';vc='#15803d';
+  } else if(pct>=85){
+    emoji='🎉';title='色觉优秀！';sub=`答对 ${correct} / ${total} 题`;
+    vtitle='色觉状况良好';
+    vtext='您的色觉辨别能力较强，仅少量题目出现偏差，整体色觉状况良好。';
+    vbg='#eef0fd';vc='#3730a3';
+  } else if(pct>=65){
+    emoji='👍';title='色觉良好';sub=`答对 ${correct} / ${total} 题`;
+    vtitle='整体正常，有小偏差';
+    vtext='您的色觉整体表现正常，但部分颜色区分存在偏差，建议在不同光线下多次测试，或咨询眼科医生。';
+    vbg='#fefce8';vc='#854d0e';
+  } else if(pct>=45){
+    emoji='⚠️';title='色觉可能存在偏差';sub=`答对 ${correct} / ${total} 题`;
+    vtitle='建议关注';
+    vtext='测试中有较多颜色识别错误，色觉可能存在一定异常。建议前往专业眼科机构进行色盲检测。';
+    vbg='#fff7ed';vc='#9a3412';
+  } else {
+    emoji='🔍';title='建议专业检测';sub=`答对 ${correct} / ${total} 题`;
+    vtitle='色觉辨别能力偏低';
+    vtext='您的色觉辨别能力较低，可能存在色盲或色弱。请前往专业眼科机构进行规范诊断，本工具结果仅供参考。';
+    vbg='#fef2f2';vc='#991b1b';
+  }
+
+  document.getElementById('r-emoji').textContent = emoji;
+  document.getElementById('r-title').textContent = title;
+  document.getElementById('r-sub').textContent   = sub;
+  document.getElementById('v-title').textContent = '📋 '+vtitle;
+  document.getElementById('v-text').textContent  = vtext;
+  const vcard = document.getElementById('verdict');
+  vcard.style.background   = vbg;
+  vcard.style.color        = vc;
+  vcard.style.borderColor  = vc+'44';
+}
+
+/* ── 回顾页 ── */
+function showReview(){
+  const list = document.getElementById('review-list');
+  list.innerHTML = '';
+
+  // 缩略图逻辑尺寸
+  const thumbPx = 80;
+
+  TESTS.forEach((t,i)=>{
+    const sc  = SCHEMES[t.si % SCHEMES.length];
+    const ua  = userAns[i];
+    const ok  = (ua === t.d);
+    const rLabel = t.d==='none'?'无数字':t.d;
+    const uLabel = ua==='none'?'无数字':(ua??'未作答');
+
+    const item = document.createElement('div');
+    item.className = 'ri';
+    item.innerHTML = `
+      <div class="ri-head">
+        <span class="ri-seq">图 ${String(i+1).padStart(2,'0')}</span>
+        <span class="ri-badge ${ok?'ok':'bad'}">${ok?'✓ 答对':'✗ 答错'}</span>
+      </div>
+      <div class="ri-body">
+        <div class="ri-thumb">
+          <canvas id="rc-${i}"
+            width="${thumbPx*(Math.min(window.devicePixelRatio||1,3))}"
+            height="${thumbPx*(Math.min(window.devicePixelRatio||1,3))}"
+            style="width:${thumbPx}px;height:${thumbPx}px;border-radius:50%;display:block;"></canvas>
+          <div class="ri-overlay ${ok?'ok':'bad'}">${ok?'✓':'✗'}</div>
+        </div>
+        <div class="ri-info">
+          <span class="ri-type" style="background:${sc.color}">${sc.name}</span>
+          <div class="ri-rows">
+            <div class="ri-row ${ok?'u-ok':'u-bad'}">
+              <span class="ri-lbl">你的选择</span>
+              <span class="ri-val">${uLabel}</span>
+            </div>
+            <div class="ri-row right">
+              <span class="ri-lbl">正确答案</span>
+              <span class="ri-val" style="color:${ok?'#15803d':'#b91c1c'}">${rLabel}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    list.appendChild(item);
+
+    // 复制缩略图
+    setTimeout(()=>{
+      const mc  = document.getElementById('rc-'+i);
+      if(!mc||!offscreens[i]) return;
+      const dpr = Math.min(window.devicePixelRatio||1,3);
+      mc.width  = thumbPx*dpr;
+      mc.height = thumbPx*dpr;
+      mc.style.width  = thumbPx+'px';
+      mc.style.height = thumbPx+'px';
+      mc.getContext('2d').drawImage(offscreens[i], 0, 0, thumbPx*dpr, thumbPx*dpr);
+    }, 0);
+  });
+
+  showPage('pg-review');
+}
+
+/* ── 重置 ── */
+function restartTest(){
+  showPage('pg-intro');
+}
+</script>
+</body>
+</html>
